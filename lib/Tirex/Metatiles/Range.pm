@@ -55,7 +55,7 @@ sub new
     Carp::croak("you cannot have parameters 'y' and 'ymin'/'ymax'") if ( exists($options{'y'}) && ( exists($options{'ymin'}) || exists($options{'ymax'}) ) );
     Carp::croak("you cannot have parameters 'x' and 'xmin'/'xmax'") if ( exists($options{'x'}) && ( exists($options{'xmin'}) || exists($options{'xmax'}) ) );
 
-    foreach my $var ('xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax')
+    foreach my $var ('xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax', 'explodemin', 'explodemax')
     {
         Carp::croak("$var must be zero or positive integer") if ( exists($options{$var}) && ($options{$var} !~ /^[0-9]+$/) );
     }
@@ -67,7 +67,7 @@ sub new
         Carp::croak("$var must be legal latitude value" ) if ( $var =~ /^lat/ && exists($options{$var}) && ($options{$var} <  -90 || $options{$var} >  90) );
     }
 
-    foreach my $var ('x', 'y', 'z', 'lon', 'lat')
+    foreach my $var ('x', 'y', 'z', 'lon', 'lat', 'explode')
     {
         Carp::croak("'${var}min' but missing '${var}max'") if ( exists($options{$var . 'min'}) && ! exists($options{$var . 'max'}) );
         Carp::croak("'${var}max' but missing '${var}min'") if ( exists($options{$var . 'max'}) && ! exists($options{$var . 'min'}) );
@@ -103,6 +103,10 @@ sub new
     ($self->{'xmin'  }, $self->{'xmax'  }) = (List::Util::min($self->{'xmin'  }, $self->{'xmax'  }), List::Util::max($self->{'xmin'  }, $self->{'xmax'  })) if (defined $self->{'xmin'  });
     ($self->{'lonmin'}, $self->{'lonmax'}) = (List::Util::min($self->{'lonmin'}, $self->{'lonmax'}), List::Util::max($self->{'lonmin'}, $self->{'lonmax'})) if (defined $self->{'lonmin'});
     ($self->{'latmin'}, $self->{'latmax'}) = (List::Util::min($self->{'latmin'}, $self->{'latmax'}), List::Util::max($self->{'latmin'}, $self->{'latmax'})) if (defined $self->{'latmin'});
+    ($self->{'explodemin'}, $self->{'explodemax'}) = (List::Util::min($self->{'explodemin'}, $self->{'explodemax'}), List::Util::max($self->{'explodemin'}, $self->{'explodemax'})) if (defined $self->{'explodemin'});
+
+    Carp::croak("explode range must be above zoom range")
+        if (exists($self->{'explodemin'}) && $self->{'explodemin'} <= $self->{'zmax'});
 
     # if there is only one zoom level, calculate x/y range now
     if ($self->{'zmin'} == $self->{'zmax'})
@@ -127,9 +131,12 @@ sub _parse_key_value
     elsif ($key eq 'z')      { $self->_parse_int_range('z', $value); }
     elsif ($key eq 'x')      { $self->_parse_int_range('x', $value); }
     elsif ($key eq 'y')      { $self->_parse_int_range('y', $value); }
+    elsif ($key eq 'explode'){ $self->_parse_int_range('explode', $value); }
 
     elsif ($key eq 'zmin')   { $self->{'zmin'} = $value; }
     elsif ($key eq 'zmax')   { $self->{'zmax'} = $value; }
+    elsif ($key eq 'explodemin')   { $self->{'explodemin'} = $value; }
+    elsif ($key eq 'explodemax')   { $self->{'explodemax'} = $value; }
 
     elsif ($key eq 'xmin')   { $self->{'xmin'} = int($value / $self->{'mtx'}) * $self->{'mtx'}; }
     elsif ($key eq 'xmax')   { $self->{'xmax'} = int($value / $self->{'mtx'}) * $self->{'mtx'}; }
@@ -187,6 +194,7 @@ sub reset
 
     $self->{'current_map_pos'} = 0;
     $self->{'current_z'} = $self->{'zmin'};
+    $self->{'current_explode'} = $self->{'explodemin'};
 
     ($self->{'ymin_for_current_z'}, $self->{'ymax_for_current_z'}) = $self->_get_range_y($self->{'current_z'});
     ($self->{'xmin_for_current_z'}, $self->{'xmax_for_current_z'}) = $self->_get_range_x($self->{'current_z'});
@@ -345,8 +353,14 @@ sub next
 
                 if ($self->{'current_z'} > $self->{'zmax'})
                 {
-                    $self->{'finished'} = 1;
-                    return $metatile;
+                    if (defined($self->{'current_explode'}))
+                    {
+                    }
+                    else
+                    {
+                       $self->{'finished'} = 1;
+                       return $metatile;
+                    }
                 }
 
                 ($self->{'ymin_for_current_z'}, $self->{'ymax_for_current_z'}) = $self->_get_range_y($self->{'current_z'});
